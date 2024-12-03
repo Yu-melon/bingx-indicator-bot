@@ -6,6 +6,18 @@ const axios = require("axios");
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
+// 檢查 BingX 是否支持
+if (ccxt.exchanges.includes('bingx')) {
+  const exchange = new ccxt['bingx']({
+    apiKey: process.env.apiKey,
+    secret: process.env.secret,
+  });
+
+  console.log('BingX 已成功初始化！');
+} else {
+  console.error('BingX 不被 ccxt 支持！');
+}
+
 // 初始化 BingX 交易所
 const exchange = new ccxt.bingx({
   apiKey: process.env.apiKey,
