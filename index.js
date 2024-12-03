@@ -141,3 +141,38 @@ module.exports = async (req, res) => {
     res.status(500).json({ message: "執行錯誤", error: error.message });
   }
 };
+
+
+// 捕捉主程式的錯誤
+module.exports = async (req, res) => {
+  try {
+    // 主程式邏輯
+    const symbols = await exchange.loadMarkets();
+    const usdtPairs = Object.keys(symbols).filter((symbol) => symbol.endsWith("/USDT"));
+
+    const results = [];
+    for (const symbol of usdtPairs) {
+      const analysis = await fetchAndAnalyze(symbol);
+      if (analysis) {
+        results.push(analysis);
+      }
+    }
+
+    // 生成報告
+    const report = results.map((result) => {
+      return `交易對: ${result.symbol}, 信號: ${result.signal}`;
+    }).join("\n");
+
+    console.log("分析完成，結果如下：");
+    console.log(report);
+
+    res.status(200).json({
+      message: "分析完成！結果已打印到日誌。",
+      data: results,
+    });
+  } catch (error) {
+    console.error("主程式發生錯誤：", error.message);
+    console.error(error.stack); // 打印堆疊信息
+    res.status(500).json({ message: "執行錯誤", error: error.message });
+  }
+};
