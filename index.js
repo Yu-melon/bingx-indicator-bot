@@ -1,29 +1,40 @@
-const ccxt = require("ccxt");
-const { RSI, EMA, MACD, SAR } = require("technicalindicators");
-const axios = require("axios");
+const axios = require('axios');
+const { RSI, EMA, MACD, SAR } = require('technicalindicators');
 
 // Telegram 配置
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// 檢查 BingX 是否支持
-if (ccxt.exchanges.includes('bingx')) {
-  const exchange = new ccxt['bingx']({
-    apiKey: process.env.apiKey,
-    secret: process.env.secret,
-  });
+// BingX API 配置
+const API_BASE_URL = 'https://api.bingx.com/api/v1/';
+const API_KEY = process.env.apiKey;
 
-  console.log('BingX 已成功初始化！');
-} else {
-  console.error('BingX 不被 ccxt 支持！');
+// 獲取 K 線數據
+async function fetchKlines(symbol, interval = '1d', limit = 50) {
+  try {
+    const response = await axios.get(`${API_BASE_URL}market/candles`, {
+      params: {
+        symbol,
+        interval,
+        limit,
+      },
+      headers: {
+        'X-BX-APIKEY': API_KEY,
+      },
+    });
+    return response.data.data.map((item) => ({
+      timestamp: item[0],
+      open: parseFloat(item[1]),
+      high: parseFloat(item[2]),
+      low: parseFloat(item[3]),
+      close: parseFloat(item[4]),
+      volume: parseFloat(item[5]),
+    }));
+  } catch (error) {
+    console.error(`Error fetching Klines for ${symbol}:`, error.message);
+    return null;
+  }
 }
-
-// 初始化 BingX 交易所
-const exchange = new ccxt.bingx({
-  apiKey: process.env.apiKey,
-  secret: process.env.secret,
-});
-
 
 // 計算技術指標
 async function calculateIndicators(data) {
@@ -60,131 +71,81 @@ async function calculateIndicators(data) {
 }
 
 // 生成信號
-function generateSignal(indicators) {
-  const { rsi, emaShort, emaLong, macd, macdSignal, sar, close } = indicators;
+function generateSignal(indicators, closePrice) {
+  const { rsi, emaShort, emaLong, macd, macdSignal, sar } = indicators;
 
-  if (rsi < 50 && emaShort > emaLong && macd > macdSignal && close > sar) {
-    return "多方";
-  } else if (rsi > 50 && emaShort < emaLong && macd < macdSignal && close < sar) {
-    return "空方";
+  if (rsi < 50 && emaShort > emaLong && macd > macdSignal && closePrice > sar) {
+    return '多方';
+  } else if (rsi > 50 && emaShort < emaLong && macd < macdSignal && closePrice < sar) {
+    return '空方';
   } else {
-    return "觀察";
-  }
-}
-
-// 抓取數據並計算
-async function fetchAndAnalyze(symbol, timeframe = "1d") {
-  try {
-    const ohlcv = await exchange.fetchOHLCV(symbol, timeframe);
-    const formattedData = ohlcv.map((item) => ({
-      timestamp: item[0],
-      open: item[1],
-      high: item[2],
-      low: item[3],
-      close: item[4],
-      volume: item[5],
-    }));
-
-    const indicators = await calculateIndicators(formattedData);
-    const signal = generateSignal({ ...indicators, close: formattedData.slice(-1)[0].close });
-
-    return {
-      symbol,
-      rsi: indicators.rsi,
-      emaShort: indicators.emaShort,
-      emaLong: indicators.emaLong,
-      macd: indicators.macd,
-      macdSignal: indicators.macdSignal,
-      sar: indicators.sar,
-      signal,
-    };
-  } catch (error) {
-    console.error(`Error fetching data for ${symbol}:`, error.message);
-    return null;
+    return '觀察';
   }
 }
 
 // 發送訊息到 Telegram
 async function sendToTelegram(message) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  await axios.post(url, {
-    chat_id: TELEGRAM_CHAT_ID,
-    text: message,
-  });
+  try {
+    await axios.post(url, {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: message,
+    });
+    console.log('Message sent to Telegram!');
+  } catch (error) {
+    console.error('Error sending message to Telegram:', error.message);
+  }
 }
 
 // 主程式
 module.exports = async (req, res) => {
   try {
-    const symbols = await exchange.loadMarkets();
-    const usdtPairs = Object.keys(symbols).filter((symbol) => symbol.endsWith("/USDT"));
+    // 獲取支持的交易對
+    const symbolsResponse = await axios.get(`${API_BASE_URL}market/symbols`, {
+      headers: {
+        'X-BX-APIKEY': API_KEY,
+      },
+    });
+    const symbols = symbolsResponse.data.data
+      .filter((s) => s.quoteAsset === 'USDT') // 僅選取 USDT 的交易對
+      .map((s) => s.symbol);
 
     const results = [];
-    for (const symbol of usdtPairs) {
-      const analysis = await fetchAndAnalyze(symbol);
-      if (analysis) {
-        results.push(analysis);
+    for (const symbol of symbols) {
+      const klines = await fetchKlines(symbol);
+      if (klines && klines.length > 0) {
+        const latestData = klines.slice(-1)[0];
+        const indicators = await calculateIndicators(klines);
+        const signal = generateSignal(indicators, latestData.close);
+
+        results.push({
+          symbol,
+          rsi: indicators.rsi.toFixed(2),
+          emaShort: indicators.emaShort.toFixed(2),
+          emaLong: indicators.emaLong.toFixed(2),
+          macd: indicators.macd.toFixed(2),
+          macdSignal: indicators.macdSignal.toFixed(2),
+          sar: indicators.sar.toFixed(2),
+          signal,
+        });
       }
     }
 
+    // 生成報告並發送到 Telegram
     const report = results
       .map(
-        (result) =>
-          `交易對: ${result.symbol}\nRSI: ${result.rsi.toFixed(2)}\nEMA短期: ${result.emaShort.toFixed(
-            2
-          )}\nEMA長期: ${result.emaLong.toFixed(2)}\nMACD: ${result.macd.toFixed(
-            2
-          )}\nMACD信號: ${result.macdSignal.toFixed(2)}\nSAR: ${result.sar.toFixed(2)}\n信號: ${
-            result.signal
-          }\n`
+        (r) =>
+          `交易對: ${r.symbol}\nRSI: ${r.rsi}\nEMA短期: ${r.emaShort}\nEMA長期: ${r.emaLong}\nMACD: ${r.macd}\nMACD信號: ${r.macdSignal}\nSAR: ${r.sar}\n信號: ${r.signal}`
       )
-      .join("\n------------------\n");
-
-    // 發送到 Telegram
+      .join('\n\n');
     await sendToTelegram(`BingX 分析結果:\n\n${report}`);
 
-    // 回應 API 請求
     res.status(200).json({
-      message: "分析完成，結果已發送到 Telegram。",
+      message: '分析完成，結果已發送到 Telegram。',
       data: results,
     });
   } catch (error) {
-    console.error("主程式錯誤:", error.message);
-    res.status(500).json({ message: "執行錯誤", error: error.message });
-  }
-};
-
-
-// 捕捉主程式的錯誤
-module.exports = async (req, res) => {
-  try {
-    // 主程式邏輯
-    const symbols = await exchange.loadMarkets();
-    const usdtPairs = Object.keys(symbols).filter((symbol) => symbol.endsWith("/USDT"));
-
-    const results = [];
-    for (const symbol of usdtPairs) {
-      const analysis = await fetchAndAnalyze(symbol);
-      if (analysis) {
-        results.push(analysis);
-      }
-    }
-
-    // 生成報告
-    const report = results.map((result) => {
-      return `交易對: ${result.symbol}, 信號: ${result.signal}`;
-    }).join("\n");
-
-    console.log("分析完成，結果如下：");
-    console.log(report);
-
-    res.status(200).json({
-      message: "分析完成！結果已打印到日誌。",
-      data: results,
-    });
-  } catch (error) {
-    console.error("主程式發生錯誤：", error.message);
-    console.error(error.stack); // 打印堆疊信息
-    res.status(500).json({ message: "執行錯誤", error: error.message });
+    console.error('Error in main process:', error.message);
+    res.status(500).json({ error: error.message });
   }
 };
