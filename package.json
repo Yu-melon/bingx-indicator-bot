@@ -5,8 +5,8 @@
   "scripts": {
     "start": "node index.js"
   },
-  "dependencies": {
-    "ccxt": "^1.95.15",
+"dependencies": {
+  "ccxt": "^1.97.0", // 確保版本是最新
     "technicalindicators": "^3.0.0",
     "axios": "^1.3.0"
   }
