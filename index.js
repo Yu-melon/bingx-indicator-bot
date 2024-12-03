@@ -3,14 +3,15 @@ const { RSI, EMA, MACD, SAR } = require("technicalindicators");
 const axios = require("axios");
 
 // Telegram 配置
-const TELEGRAM_BOT_TOKEN = "你的Telegram Bot Token";
-const TELEGRAM_CHAT_ID = "你的Chat ID";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // 初始化 BingX 交易所
 const exchange = new ccxt.bingx({
-  apiKey: "你的API金鑰",
-  secret: "你的API密鑰",
+  apiKey: process.env.apiKey,
+  secret: process.env.secret,
 });
+
 
 // 計算技術指標
 async function calculateIndicators(data) {
