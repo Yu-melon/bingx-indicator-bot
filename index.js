@@ -42,39 +42,46 @@ async function fetchKlines(symbol, interval = '1d', limit = 50) {
 }
 
 // 計算技術指標並生成信號
-function calculateIndicators(data) {
+function calculateIndicators(data, symbol) {
   const closePrices = data.map((item) => item.close);
   const highPrices = data.map((item) => item.high);
   const lowPrices = data.map((item) => item.low);
 
-  const rsi = RSI.calculate({ values: closePrices, period: 7 }).slice(-1)[0];
-  const emaShort = EMA.calculate({ values: closePrices, period: 5 }).slice(-1)[0];
-  const emaLong = EMA.calculate({ values: closePrices, period: 15 }).slice(-1)[0];
-  const macdResult = MACD.calculate({
-    values: closePrices,
-    fastPeriod: 12,
-    slowPeriod: 26,
-    signalPeriod: 9,
-    SimpleMAOscillator: false,
-    SimpleMASignal: false,
-  }).slice(-1)[0];
-  const sar = SAR.calculate({
-    high: highPrices,
-    low: lowPrices,
-    step: 0.02,
-    max: 0.2,
-  }).slice(-1)[0];
+  try {
+    const rsi = RSI.calculate({ values: closePrices, period: 7 }).slice(-1)[0];
+    const emaShort = EMA.calculate({ values: closePrices, period: 5 }).slice(-1)[0];
+    const emaLong = EMA.calculate({ values: closePrices, period: 15 }).slice(-1)[0];
+    const macdResult = MACD.calculate({
+      values: closePrices,
+      fastPeriod: 12,
+      slowPeriod: 26,
+      signalPeriod: 9,
+      SimpleMAOscillator: false,
+      SimpleMASignal: false,
+    }).slice(-1)[0];
+    const sar = SAR.calculate({
+      high: highPrices,
+      low: lowPrices,
+      step: 0.02,
+      max: 0.2,
+    }).slice(-1)[0];
 
-  if (!macdResult || !sar || rsi === undefined || emaShort === undefined || emaLong === undefined) {
-    return '觀察';
-  }
+    console.log(`技術指標 (${symbol}): RSI: ${rsi}, EMA Short: ${emaShort}, EMA Long: ${emaLong}, MACD: ${macdResult?.MACD}, SAR: ${sar}`);
 
-  // 信號邏輯
-  if (rsi < 50 && emaShort > emaLong && macdResult.MACD > macdResult.signal && data[data.length - 1].close > sar) {
-    return '多方';
-  } else if (rsi > 50 && emaShort < emaLong && macdResult.MACD < macdResult.signal && data[data.length - 1].close < sar) {
-    return '空方';
-  } else {
+    if (!macdResult || !sar || rsi === undefined || emaShort === undefined || emaLong === undefined) {
+      return '觀察';
+    }
+
+    // 信號邏輯
+    if (rsi < 50 && emaShort > emaLong && macdResult.MACD > macdResult.signal && data[data.length - 1].close > sar) {
+      return '多方';
+    } else if (rsi > 50 && emaShort < emaLong && macdResult.MACD < macdResult.signal && data[data.length - 1].close < sar) {
+      return '空方';
+    } else {
+      return '觀察';
+    }
+  } catch (error) {
+    console.error(`技術指標計算失敗 (${symbol}):`, error.message);
     return '觀察';
   }
 }
@@ -92,9 +99,9 @@ module.exports = async (req, res) => {
     // 處理數據結構
     let symbolsData = [];
     if (Array.isArray(symbolsResponse.data.data)) {
-      symbolsData = symbolsResponse.data.data; // 數據是數組
+      symbolsData = symbolsResponse.data.data;
     } else if (symbolsResponse.data.data && typeof symbolsResponse.data.data === 'object') {
-      symbolsData = Object.values(symbolsResponse.data.data); // 數據是對象
+      symbolsData = Object.values(symbolsResponse.data.data);
     } else {
       throw new Error("無法解析 BingX API 返回的數據結構");
     }
@@ -107,7 +114,7 @@ module.exports = async (req, res) => {
       const klines = await fetchKlines(symbolData.ticker_id);
       if (!klines) continue;
 
-      const signal = calculateIndicators(klines);
+      const signal = calculateIndicators(klines, symbolData.ticker_id);
       results[signal].push(symbolData.ticker_id);
     }
 
