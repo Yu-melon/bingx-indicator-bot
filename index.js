@@ -87,7 +87,18 @@ module.exports = async (req, res) => {
       headers: { 'X-BX-APIKEY': API_KEY },
     });
 
-    const symbolsData = symbolsResponse.data.data || [];
+    console.log("BingX API 返回數據：", JSON.stringify(symbolsResponse.data, null, 2));
+
+    // 處理數據結構
+    let symbolsData = [];
+    if (Array.isArray(symbolsResponse.data.data)) {
+      symbolsData = symbolsResponse.data.data; // 數據是數組
+    } else if (symbolsResponse.data.data && typeof symbolsResponse.data.data === 'object') {
+      symbolsData = Object.values(symbolsResponse.data.data); // 數據是對象
+    } else {
+      throw new Error("無法解析 BingX API 返回的數據結構");
+    }
+
     const validSymbols = symbolsData.filter((item) => item.quote_currency === 'USDT');
     const results = { 多方: [], 空方: [], 觀察: [] };
 
