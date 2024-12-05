@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { RSI, EMA, MACD, SAR } = require('technicalindicators');
 
 // Telegram 配置
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -22,75 +23,98 @@ async function sendToTelegram(message) {
   }
 }
 
+// 獲取交易對的 K 線數據
+async function fetchKlines(symbol, interval = '1d', limit = 50) {
+  try {
+    const response = await axios.get(`${API_BASE_URL}market/candles`, {
+      params: { symbol, interval, limit },
+      headers: { 'X-BX-APIKEY': API_KEY },
+    });
+    return response.data.data.map((item) => ({
+      close: parseFloat(item[4]),
+      high: parseFloat(item[2]),
+      low: parseFloat(item[3]),
+    }));
+  } catch (error) {
+    console.error(`Error fetching Klines for ${symbol}:`, error.message);
+    return null;
+  }
+}
+
+// 計算技術指標並生成信號
+function calculateIndicators(data) {
+  const closePrices = data.map((item) => item.close);
+  const highPrices = data.map((item) => item.high);
+  const lowPrices = data.map((item) => item.low);
+
+  const rsi = RSI.calculate({ values: closePrices, period: 7 }).slice(-1)[0];
+  const emaShort = EMA.calculate({ values: closePrices, period: 5 }).slice(-1)[0];
+  const emaLong = EMA.calculate({ values: closePrices, period: 15 }).slice(-1)[0];
+  const macdResult = MACD.calculate({
+    values: closePrices,
+    fastPeriod: 12,
+    slowPeriod: 26,
+    signalPeriod: 9,
+    SimpleMAOscillator: false,
+    SimpleMASignal: false,
+  }).slice(-1)[0];
+  const sar = SAR.calculate({
+    high: highPrices,
+    low: lowPrices,
+    step: 0.02,
+    max: 0.2,
+  }).slice(-1)[0];
+
+  if (!macdResult || !sar || rsi === undefined || emaShort === undefined || emaLong === undefined) {
+    return '觀察';
+  }
+
+  // 信號邏輯
+  if (rsi < 50 && emaShort > emaLong && macdResult.MACD > macdResult.signal && data[data.length - 1].close > sar) {
+    return '多方';
+  } else if (rsi > 50 && emaShort < emaLong && macdResult.MACD < macdResult.signal && data[data.length - 1].close < sar) {
+    return '空方';
+  } else {
+    return '觀察';
+  }
+}
+
 // 主程式
 module.exports = async (req, res) => {
   try {
-    // 獲取交易對數據
+    // 獲取支持的交易對
     const symbolsResponse = await axios.get(`${API_BASE_URL}market/symbols`, {
-      headers: {
-        'X-BX-APIKEY': API_KEY,
-      },
+      headers: { 'X-BX-APIKEY': API_KEY },
     });
 
-    // 調試打印返回的數據結構
-    console.log("BingX API 返回的數據結構：", JSON.stringify(symbolsResponse.data, null, 2));
+    const symbolsData = symbolsResponse.data.data || [];
+    const validSymbols = symbolsData.filter((item) => item.quote_currency === 'USDT');
+    const results = { 多方: [], 空方: [], 觀察: [] };
 
-    // 初始化有效與略過交易對列表
-    let validSymbols = [];
-    let skippedSymbols = [];
+    // 處理每個有效交易對
+    for (const symbolData of validSymbols) {
+      const klines = await fetchKlines(symbolData.ticker_id);
+      if (!klines) continue;
 
-    // 處理數據結構，篩選有效交易對
-    if (Array.isArray(symbolsResponse.data.data)) {
-      symbolsResponse.data.data.forEach((item) => {
-        if (item.symbol && item.quoteAsset === 'USDT') {
-          validSymbols.push(item.symbol);
-        } else {
-          skippedSymbols.push(item);
-        }
-      });
-    } else if (symbolsResponse.data.data && typeof symbolsResponse.data.data === 'object') {
-      Object.values(symbolsResponse.data.data).forEach((item) => {
-        if (item.symbol && item.quoteAsset === 'USDT') {
-          validSymbols.push(item.symbol);
-        } else {
-          skippedSymbols.push(item);
-        }
-      });
-    } else {
-      console.error("無法解析 BingX API 返回的數據結構");
-      res.status(200).json({
-        message: '未找到符合條件的交易對，請檢查 API 返回的數據。',
-        data: symbolsResponse.data,
-      });
-      return;
+      const signal = calculateIndicators(klines);
+      results[signal].push(symbolData.ticker_id);
     }
 
-    // 打印有效與略過的交易對
-    console.log("篩選出的有效交易對：", validSymbols);
-    console.log("被略過的交易對：", skippedSymbols);
+    // 生成報告
+    const report = `
+BingX 策略篩選結果：
+多方交易對：
+${results.多方.join('\n') || '無'}
+空方交易對：
+${results.空方.join('\n') || '無'}
+觀察交易對：
+${results.觀察.join('\n') || '無'}
+    `;
 
-    // 如果沒有有效交易對，返回提示信息
-    if (validSymbols.length === 0) {
-      console.error("未找到任何有效的交易對！");
-      res.status(200).json({
-        message: '未找到符合條件的交易對。',
-        skippedSymbols,
-      });
-      return;
-    }
+    // 發送到 Telegram
+    await sendToTelegram(report);
 
-    // 生成報告並發送到 Telegram
-    const report = validSymbols
-      .map((symbol) => `交易對: ${symbol}`)
-      .join('\n');
-    await sendToTelegram(`BingX 有效交易對結果:\n\n${report}`);
-
-    // 返回篩選結果到 API
-    res.status(200).json({
-      message: '篩選完成，結果已發送到 Telegram。',
-      validSymbols,
-      skippedSymbols,
-    });
+    res.status(200).json({ message: '篩選完成，結果已發送到 Telegram。', results });
   } catch (error) {
     console.error('Error in main process:', error.message);
     res.status(500).json({ error: error.message });
