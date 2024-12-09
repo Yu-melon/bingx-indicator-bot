@@ -4,8 +4,8 @@ const fetch = require('node-fetch');
 async function initializeBingX() {
     try {
         const exchange = new ccxt.bingx({
-            apiKey: 'BWLEWQ2D5I61tt1LpBikM0FP1WOhXirQmMQTKv75ThwDOTerAGuglejMIT5SzDNVuo5JbdxuJCiuQrY8Fw', // 替換為 BingX API Key
-            secret: '8v0Hau013nuLgbZDxvCuKlFvKIOXoZL4Nmkvo5e0gAyGPYSl7LLFzeV0DWwheyIpEaXZBNy2abPlGLYOtPw' // 替換為 BingX Secret
+            apiKey: 'YOUR_BINGX_API_KEY', // 替換為 BingX API Key
+            secret: 'YOUR_BINGX_SECRET' // 替換為 BingX Secret
         });
         await exchange.loadMarkets();
         console.log('BingX 交易所連線成功！');
@@ -66,8 +66,8 @@ function calculateRSI(data) {
 }
 
 async function sendToTelegram(message) {
-    const TELEGRAM_API_TOKEN = '7486762914:AAEX7up5Ty20xdMX65Q1pzwtUiVyvbc7IJw';
-    const TELEGRAM_CHAT_ID = '-1002499571524';
+    const TELEGRAM_API_TOKEN = 'YOUR_TELEGRAM_API_TOKEN';
+    const TELEGRAM_CHAT_ID = 'YOUR_TELEGRAM_CHAT_ID';
     const url = `https://api.telegram.org/bot${TELEGRAM_API_TOKEN}/sendMessage`;
     try {
         const response = await fetch(url, {
