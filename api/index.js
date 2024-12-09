@@ -1,12 +1,3 @@
-export default function handler(req, res) {
-    // 建立一個簡單的 JSON API 回應
-    res.status(200).json({
-        message: 'BingX Indicator Bot is running successfully!',
-        instructions: 'This is a sample API response. Add your logic here.'
-    });
-}
-
-
 const ccxt = require('ccxt');
 const fetch = require('node-fetch');
 
