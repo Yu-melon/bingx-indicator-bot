@@ -1,12 +1,8 @@
 {
-  "name": "bingx-indicator-bot",
-  "version": "1.0.0",
-  "main": "api/index.js",
-  "scripts": {
-    "start": "node api/index.js"
-  },
-  "dependencies": {
-    "ccxt": "^3.0.0",
-    "node-fetch": "^3.3.1"
-  }
+    "name": "telegram-message-bot",
+    "version": "1.0.0",
+    "main": "api/index.js",
+    "dependencies": {
+        "node-telegram-bot-api": "^0.61.0"
+    }
 }
