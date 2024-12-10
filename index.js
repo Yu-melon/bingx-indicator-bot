@@ -1,33 +1,37 @@
 const TelegramBot = require('node-telegram-bot-api');
 
-// 環境變數
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; // Telegram Bot Token
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;     // Telegram Chat ID
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// 定義 API Handler
 export default async function handler(req, res) {
     try {
-        if (req.method !== 'POST') {
-            res.status(405).json({ success: false, error: 'Only POST requests are allowed' });
+        // 檢查是否是 GET 請求，用來測試部署
+        if (req.method === 'GET') {
+            const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
+            await bot.sendMessage(TELEGRAM_CHAT_ID, 'Hello, this is a test message from Vercel!');
+            res.status(200).json({ success: true, message: 'Test message sent to Telegram!' });
             return;
         }
 
-        const { message } = req.body;
+        // POST 請求，發送自定義訊息
+        if (req.method === 'POST') {
+            const { message } = req.body;
 
-        if (!message) {
-            res.status(400).json({ success: false, error: 'Message is required' });
+            if (!message) {
+                res.status(400).json({ success: false, error: 'Message is required' });
+                return;
+            }
+
+            const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
+            await bot.sendMessage(TELEGRAM_CHAT_ID, message);
+
+            res.status(200).json({ success: true, message: 'Message sent to Telegram successfully!' });
             return;
         }
 
-        // 初始化 Telegram Bot
-        const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
-
-        // 發送訊息到 Telegram
-        await bot.sendMessage(TELEGRAM_CHAT_ID, message);
-
-        res.status(200).json({ success: true, message: 'Message sent to Telegram successfully!' });
+        res.status(405).json({ success: false, error: 'Only GET and POST requests are allowed' });
     } catch (error) {
-        console.error('Error sending message to Telegram:', error);
+        console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 }
