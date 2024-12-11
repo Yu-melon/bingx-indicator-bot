@@ -1,19 +1,26 @@
-const TelegramBot = require('node-telegram-bot-api');
+const axios = require('axios');
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const LINE_NOTIFY_TOKEN = process.env.LINE_NOTIFY_ACCESS_TOKEN; // LINE Notify 的 Access Token
 
 export default async function handler(req, res) {
     try {
-        // 檢查是否是 GET 請求，用來測試部署
         if (req.method === 'GET') {
-            const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
-            await bot.sendMessage(TELEGRAM_CHAT_ID, 'Hello, this is a test message from Vercel!');
-            res.status(200).json({ success: true, message: 'Test message sent to Telegram!' });
+            // 測試訊息
+            const response = await axios.post(
+                'https://notify-api.line.me/api/notify',
+                new URLSearchParams({ message: 'Hello, this is a test message from Vercel via LINE Notify!' }),
+                {
+                    headers: {
+                        Authorization: `Bearer ${LINE_NOTIFY_TOKEN}`,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                }
+            );
+
+            res.status(200).json({ success: true, data: response.data });
             return;
         }
 
-        // POST 請求，發送自定義訊息
         if (req.method === 'POST') {
             const { message } = req.body;
 
@@ -22,16 +29,24 @@ export default async function handler(req, res) {
                 return;
             }
 
-            const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
-            await bot.sendMessage(TELEGRAM_CHAT_ID, message);
+            const response = await axios.post(
+                'https://notify-api.line.me/api/notify',
+                new URLSearchParams({ message }),
+                {
+                    headers: {
+                        Authorization: `Bearer ${LINE_NOTIFY_TOKEN}`,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                }
+            );
 
-            res.status(200).json({ success: true, message: 'Message sent to Telegram successfully!' });
+            res.status(200).json({ success: true, data: response.data });
             return;
         }
 
         res.status(405).json({ success: false, error: 'Only GET and POST requests are allowed' });
     } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        console.error('LINE Notify Error:', error.response?.data || error.message);
+        res.status(500).json({ success: false, error: error.response?.data || error.message });
     }
 }
