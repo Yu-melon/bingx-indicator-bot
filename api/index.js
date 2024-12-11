@@ -50,3 +50,12 @@ export default async function handler(req, res) {
         res.status(500).json({ success: false, error: error.response?.data || error.message });
     }
 }
+export default async function handler(req, res) {
+    try {
+        console.log('LINE_NOTIFY_ACCESS_TOKEN:', process.env.LINE_NOTIFY_ACCESS_TOKEN); // 打印環境變數
+        res.status(200).json({ success: true, message: 'Environment variable check passed!' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
